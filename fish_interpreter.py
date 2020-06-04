@@ -75,7 +75,7 @@ class Fish:
         self.stdin = []
         self.COMMANDS = {
             '>': self.right,      '<': self.left,         '^': self.up
-           ,'v': self.down,       '/': self.m_forward,    '\\': self.m_backward
+           ,'v': self.down,       '/': self.m_forward,    '\\':self.m_backward
            ,'|': self.m_vertical, '_': self.m_horizontal, '#': self.m_cross
            ,'x': self.m_random,   '!': self.tramp,        '?': self.tramp_cond
            ,'.': self.jump,       '=': self.equals,       ')': self.greater
