@@ -73,20 +73,22 @@ class Fish:
         self.register = [None]
         self.stdout = ''
         self.stdin = []
-        self.COMMANDS = {'>': self.right, '<': self.left, '^': self.up, 'v': self.down
-                        ,'/': self.m_forward, '\\': self.m_backward, '|': self.m_vertical
-                        ,'_': self.m_horizontal, '#': self.m_cross, 'x': self.m_random
-                        ,'!': self.tramp, '?': self.tramp_cond, '.': self.jump
-                        ,**{c: self.literal for c in hexdigits[:16]}
-                        ,**{o: self.arithmetic for o in '+-*,%'}
-                        ,'=': self.equals, ')': self.greater, '(': self.smaller
-                        ,"'": self.single_quote, '"': self.double_quote
-                        ,':': self.duplicate, '~': self.remove, '$': self.swap2, '@': self.swap3
-                        ,'}': self.shiftr, '{': self.shiftl, 'r': self.reverse
-                        ,'l': self.length, '[': self.new_stack, ']': self.del_stack
-                        ,'o': self.out_char, 'n': self.out_num, 'i': self.read_char
-                        ,'&': self.do_register, 'g': self.get_code, 'p': self.set_code
-                        ,';': self.end, ' ': lambda: None}
+        self.COMMANDS = {
+            '>': self.right,      '<': self.left,         '^': self.up
+           ,'v': self.down,       '/': self.m_forward,    '\\': self.m_backward
+           ,'|': self.m_vertical, '_': self.m_horizontal, '#': self.m_cross
+           ,'x': self.m_random,   '!': self.tramp,        '?': self.tramp_cond
+           ,'.': self.jump,       '=': self.equals,       ')': self.greater
+           ,'(': self.smaller,    "'": self.single_quote, '"': self.double_quote
+           ,':': self.duplicate,  '~': self.remove,       '$': self.swap2
+           ,'@': self.swap3,      '}': self.shiftr,       '{': self.shiftl
+           ,'r': self.reverse,    'l': self.length,       '[': self.new_stack
+           ,']': self.del_stack,  'o': self.out_char,     'n': self.out_num
+           ,'i': self.read_char,  '&': self.do_register,  'g': self.get_code
+           ,'p': self.set_code,   ';': self.end,          ' ': lambda: None
+           ,**{c: self.literal for c in hexdigits[:16]}   # commands 0-9 and a-f
+           ,**{o: self.arithmetic for o in '+-*,%'}       # commands + - * , %
+           }
 
 
     def fish_error(self):
@@ -230,7 +232,7 @@ class Fish:
             if self.skip: self.skip = False
             self.pos = ((col + d) % self.code.cols if self.direction in {'right', 'left'} else col
                        ,(row + d) % self.code.rows if self.direction in {'up', 'down'} else row)
-        
+
         return self.stdout
 
 
