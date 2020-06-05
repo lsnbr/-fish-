@@ -6,7 +6,7 @@ from string import hexdigits
 
 
 class FishError(Exception):
-    def __init__(self):
+    def __init__(self, message):
         super().__init__('something smells fishy...')
 
 class Fish:
@@ -45,6 +45,7 @@ class Fish:
     [           Pop x off the stack and create a new stack,
                 moving x values from the old stack onto the new one
     ]           Remove the current stack, moving its values to the top of the underlying stack
+                If the current stack is the last stack, the stack and registry just get emptied
     o n         Pop and output as a character and a number, respectively
     i           Read one character and push it to the stack. Push -1 if no input is available
     &           Pop the top value of the stack and put it in the register.
@@ -95,24 +96,37 @@ class Fish:
            ,**{o: self.arithmetic for o in '+-*,%'}       # commands + - * , %
            }
 
-    def pop(self, n: int = None) -> (int):
+    @property
+    def len_stack(self) -> int:
+        return len(self.stack[-1])
+    @property
+    def stack_count(self) -> int:
+        return len(self.stack)
+    @property
+    def current_cmd(self) -> str:
+        return self.code[self.pos]
+
+    def pop(self, n: float = None) -> (float):
         '''
-        Pops n values from the top of the stack
+        Pops round(n) values from the top of the stack as a tuple
 
         if the stack is [a,b,c,d,e], pop(2) returns (d,e)
         without argument all values get popped
-        if n is less than 1 or more than the stack length, an error gets raised
+        with n <= 0.5 an empty tuple is returned
+        if n is more than the stack length, an error gets raised
         '''
-        if n is None: n = len(self.stack[-1])
-        if not 0 < n <= len(self.stack[-1]):
-            raise FishError()
-        result = tuple(self.stack[-1][-n:]) if n > 1 else self.stack[-1][-1]
+        if n is None: n = self.len_stack
+        n = max(0, round(n))
+        if n > self.len_stack:
+            raise FishError('not enough values to pop')
+        popped = tuple(self.stack[-1][-n:]) if n > 0 else ()
         self.stack[-1][-n:] = []
-        return result
+        return popped
 
-    def push(self, *vals: float) -> None:
-        '''pushes vals to the stack, e.g [a,b] -> push(x,y) -> [a,b,x,y]'''
-        for val in vals:
+    def push(self, *vals: float, as_iter: [float] = ()) -> None:
+        '''pushes vals + as_iter to the stack, e.g [a,b] -> push(x,y, as_iter=(8,8)) -> [a,b,x,y,8,8]'''
+        items = vals + tuple(as_iter)
+        for val in items:
             self.stack[-1].append(val)
     
     # commands
@@ -125,28 +139,28 @@ class Fish:
     def up(self):
         self.direction = 'up'
     def m_forward(self):
-        self.direction = self.R_FORWARD[self.direction]
+        self.direction = Fish.R_FORWARD[self.direction]
     def m_backward(self):
-        self.direction = self.R_BACKWARD[self.direction]
+        self.direction = Fish.R_BACKWARD[self.direction]
     def m_horizontal(self):
-        self.direction = self.R_HORIZONTAL[self.direction]
+        self.direction = Fish.R_HORIZONTAL[self.direction]
     def m_vertical(self):
-        self.direction = self.R_VERTICAL[self.direction]
+        self.direction = Fish.R_VERTICAL[self.direction]
     def m_cross(self):
-        self.direction = self.R_CROSS[self.direction]
+        self.direction = Fish.R_CROSS[self.direction]
     def m_random(self):
-        self.direction = self.DIRECTIONS[randint(0, 3)]
+        self.direction = Fish.DIRECTIONS[randint(0, 3)]
     def tramp(self):
         self.skip = True
     def tramp_cond(self):
-        self.skip = not bool(self.pop(1))
+        self.skip = not bool(self.pop(1)[0])
     def jump(self):
         self.pos = self.pop(2)
     def literal(self):
-        self.push(int(self.code[self.pos], base=16))
+        self.push(int(self.current_cmd, base=16))
     def arithmetic(self):
-        try: self.push(self.OPERATORS[self.code[self.pos]](*self.pop(2)))
-        except ZeroDivisionError: raise FishError()
+        try: self.push(Fish.OPERATORS[self.current_cmd](*self.pop(2)))
+        except ZeroDivisionError: raise FishError('zero division is not allowed')
     def equals(self):
         self.push(int(op.eq(*self.pop(2))))
     def greater(self):
@@ -158,48 +172,46 @@ class Fish:
     def double_quote(self):
         self.parse_mode = '"' if self.parse_mode is None else None
     def duplicate(self):
-        self.push(*(2 * [self.pop(1)]))
+        self.push(as_iter=(2 * self.pop(1)))
     def remove(self):
         self.pop(1)
     def swap2(self):
-        self.push(*reversed(self.pop(2)))
+        self.push(as_iter=reversed(self.pop(2)))
     def swap3(self):
         x, y, z = self.pop(3)
         self.push(z, x, y)
     def shiftr(self):
-        val = self.pop()
-        if type(val) is tuple:
-            *x, y = val
+        if self.len_stack > 1:
+            *x, y = self.pop()
             self.push(y, *x)
     def shiftl(self):
-        val = self.pop()
-        if type(val) is tuple:
-            x, *y = val
+        if self.len_stack > 1:
+            x, *y = self.pop()
             self.push(*y, x)
     def reverse(self):
-        if len(self.stack[-1]) != 1:
-            self.push(*reversed(self.pop()))
+        self.push(as_iter=reversed(self.pop()))
     def length(self):
-        self.push(len(self.stack[-1]))
+        self.push(self.len_stack)
     def new_stack(self):
-        x = self.pop(self.pop(1))
+        x = self.pop(self.pop(1)[0])
         self.stack.append(list(x))
         self.register.append(None)
     def del_stack(self):
         x = self.pop()
-        self.stack.pop()
-        self.push(*x)
-        self.register.pop()
+        if self.stack_count > 1:
+            self.stack.pop()
+            self.push(as_iter=x)
+            self.register.pop()
+        else: self.register[-1] = None
     def out_char(self):
-        self.stdout += chr(round(self.pop(1)))
+        self.stdout += chr(round(self.pop(1)[0]))
     def out_num(self):
-        self.stdout += str(self.pop(1))
+        self.stdout += str(self.pop(1)[0])
     def read_char(self):
-        val = self.stdin.pop() if self.stdin else -1
-        self.push(val if isinstance(val, (int, float)) else ord(val))
+        self.push(self.stdin.pop() if self.stdin else -1)
     def do_register(self):
         if self.register[-1] is None:
-            self.register[-1] = self.pop(1)
+            self.register[-1] = self.pop(1)[0]
         else:
             self.push(self.register[-1]) 
             self.register[-1] = None
@@ -221,7 +233,7 @@ class Fish:
         while True:
             cmd = self.code[self.pos]
             if cmd not in self.VALID_CHARS:
-                raise FishError()
+                raise FishError('invalid command')
             if self.parse_mode is not None and self.parse_mode != cmd:
                 self.push(ord(cmd))
             else:
@@ -254,4 +266,4 @@ hello = Fish(bf)
 print(hello)
 #print(hello.code.cols, hello.code.rows)
 res = hello.run('+' * 97 + '.')
-print(res)
+print(repr(res))
