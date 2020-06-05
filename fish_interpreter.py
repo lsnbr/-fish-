@@ -5,6 +5,10 @@ import operator as op
 from string import hexdigits
 
 
+class FishError(Exception):
+    def __init__(self):
+        super().__init__('something smells fishy...')
+
 class Fish:
     '''
     Interprets a ><> (fish) program
@@ -21,12 +25,12 @@ class Fish:
     x           Random direction
     !           Trampoline: skip the following instruction
     ?           Conditional trampoline: pop x of the stack. Skip the following instruction if x=0
-    .           Jump: pop y and x of the stack. Jump to posintion (x,y) in the codebox
+    .           Jump: pop x, y of the stack. Jump to posintion (x,y) in the codebox
     0-9 a-f     Push the corresponding value onto the stack. a=10, ..., f=15
     + - * , %   Addition, subtraction, multiplication, float division and modulo:
                 pop x, y of the stack and push x operator y to the stack
-    =           Equals: pop x and y of the stack and push 1 if x=y and 0 otherwise
-    ) (         Greater than, less than: pop x and y of the stack and push 1 if y operator x
+    =           Equals: pop x, y of the stack and push 1 if x=y and 0 otherwise
+    ) (         Greater than, less than: pop x, y of the stack and push 1 if x operator y
                 and 0 otherwise
     ' "         String parsing: pushes every character to the stack until it finds a closing quote
     :           Duplicate the top value on the stack
@@ -45,14 +49,15 @@ class Fish:
     i           Read one character and push it to the stack. Push -1 if no input is available
     &           Pop the top value of the stack and put it in the register.
                 Calling & again will take the value in the register and put it back on the stack
-    g           Pop y and x of the stack and push the value at position (x,y) in the codebox.
-                Empty cells are equal to 0
-    p           Pop y,x and v of the stack, and change the value at position (x,y) to v,
+    g           Pop x, y of the stack and push the value at position (x,y) in the codebox.
+                Empty cells (' ') are equal to 0
+    p           Pop v, x, y of the stack, and change the value at position (x,y) to v,
                 e.g.:  123p  puts 1 at (2,3) in the codebox
     ;           End execution
     '''
-    VALID_CHARS = '> < ^ v / \\ | _ # x ! ? . + - * , % = ) ( \' " : ~ $ @ } { r l [ ] o n i & g p ;'.split() \
-                + list(hexdigits[:16]) + [' ']
+    VALID_CHARS = '> < ^ v / \\ | _ # x ! ? . + - * , % = ) ('.split() + \
+                  '\' " : ~ $ @ } { r l [ ] o n i & g p ;'.split() + \
+                  [' '] + list(hexdigits[:16])
     R_FORWARD    = {'right': 'up',    'left': 'down',  'down': 'left',  'up': 'right'}
     R_BACKWARD   = {'right': 'down',  'left': 'up',    'down': 'right', 'up': 'left'}
     R_HORIZONTAL = {'right': 'right', 'left': 'left',  'down': 'up',    'up': 'down'}
@@ -90,10 +95,6 @@ class Fish:
            ,**{o: self.arithmetic for o in '+-*,%'}       # commands + - * , %
            }
 
-
-    def fish_error(self):
-        raise Exception('something smells fishy...')
-
     def pop(self, n: int = None) -> (int):
         '''
         Pops n values from the top of the stack
@@ -104,7 +105,7 @@ class Fish:
         '''
         if n is None: n = len(self.stack[-1])
         if not 0 < n <= len(self.stack[-1]):
-            self.fish_error()
+            raise FishError()
         result = tuple(self.stack[-1][-n:]) if n > 1 else self.stack[-1][-1]
         self.stack[-1][-n:] = []
         return result
@@ -114,7 +115,6 @@ class Fish:
         for val in vals:
             self.stack[-1].append(val)
     
-
     # commands
     def right(self):
         self.direction = 'right'
@@ -146,7 +146,7 @@ class Fish:
         self.push(int(self.code[self.pos], base=16))
     def arithmetic(self):
         try: self.push(self.OPERATORS[self.code[self.pos]](*self.pop(2)))
-        except ZeroDivisionError: self.fish_error()
+        except ZeroDivisionError: raise FishError()
     def equals(self):
         self.push(int(op.eq(*self.pop(2))))
     def greater(self):
@@ -221,7 +221,7 @@ class Fish:
         while True:
             cmd = self.code[self.pos]
             if cmd not in self.VALID_CHARS:
-                self.fish_error
+                raise FishError()
             if self.parse_mode is not None and self.parse_mode != cmd:
                 self.push(ord(cmd))
             else:
