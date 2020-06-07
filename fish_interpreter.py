@@ -56,6 +56,7 @@ class Fish:
                 e.g.:  123p  puts 1 at (2,3) in the codebox
     ;           End execution
     '''
+
     VALID_CHARS = '> < ^ v / \\ | _ # x ! ? . + - * , % = ) ('.split() + \
                   '\' " : ~ $ @ } { r l [ ] o n i & g p ;'.split() + \
                   [' '] + list(hexdigits[:16])
@@ -68,7 +69,7 @@ class Fish:
     OPERATORS    = {'+': op.add, '-': op.sub, '*': op.mul, ',': op.truediv, '%': op.mod}
 
 
-    def __init__(self, code: str):
+    def __init__(self, code: str = ';'):
         self.code = FishCode(code)
         self.stack = [[]]
         self.pos = (0,0)
@@ -231,22 +232,26 @@ class Fish:
         self.is_running = True
 
         while True:
-            cmd = self.code[self.pos]
-            if cmd not in self.VALID_CHARS:
-                raise FishError('invalid command')
+            cmd = self.current_cmd
             if self.parse_mode is not None and self.parse_mode != cmd:
                 self.push(ord(cmd))
             else:
+                if cmd not in self.VALID_CHARS:
+                    raise FishError('invalid command')
                 self.COMMANDS[cmd]()
             if not self.is_running: break
+
             d = (1 + int(self.skip)) * (-1 if self.direction in {'left', 'up'} else 1)
             col, row = self.pos
-            if self.skip: self.skip = False
+            self.skip = False
             self.pos = ((col + d) % self.code.cols if self.direction in {'right', 'left'} else col
                        ,(row + d) % self.code.rows if self.direction in {'up', 'down'} else row)
 
         return self.stdout
 
+
+    def __call__(self, new_input: str = '') -> str:
+        return self.run(new_input)
 
     def __str__(self):
         return str(self.code)
@@ -262,8 +267,9 @@ class Fish:
 from various_fishes import *
 
 #print(Fish.__doc__)
-hello = Fish(bf)
-print(hello)
+#hello = Fish(bf)
+#print(hello)
 #print(hello.code.cols, hello.code.rows)
-res = hello.run('+' * 97 + '.')
-print(repr(res))
+#res = hello('+' * 97 + '...')
+#print(repr(res))
+#print(*map(ord, res))
