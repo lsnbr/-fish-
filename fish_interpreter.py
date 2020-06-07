@@ -106,6 +106,12 @@ class Fish:
     @property
     def current_cmd(self) -> str:
         return self.code[self.pos]
+    @property
+    def num_cols(self) -> int:
+        return self.code.cols
+    @property
+    def num_rows(self) -> int:
+        return self.code.rows
 
     def pop(self, n: float = None) -> (float):
         '''
@@ -217,11 +223,11 @@ class Fish:
             self.push(self.register[-1]) 
             self.register[-1] = None
     def get_code(self):
-        val = self.code[self.pop(2)]
+        val = self[self.pop(2)]
         self.push(0 if val == ' ' else ord(val))
     def set_code(self):
         v, *coord = self.pop(3)
-        self.code[coord] = chr(round(v))
+        self[coord] = chr(round(v))
     def end(self):
         self.is_running = False
 
@@ -244,8 +250,8 @@ class Fish:
             d = (1 + int(self.skip)) * (-1 if self.direction in {'left', 'up'} else 1)
             col, row = self.pos
             self.skip = False
-            self.pos = ((col + d) % self.code.cols if self.direction in {'right', 'left'} else col
-                       ,(row + d) % self.code.rows if self.direction in {'up', 'down'} else row)
+            self.pos = ((col + d) % self.num_cols if self.direction in {'right', 'left'} else col
+                       ,(row + d) % self.num_rows if self.direction in {'up', 'down'} else row)
 
         return self.stdout
 
@@ -253,23 +259,11 @@ class Fish:
     def __call__(self, new_input: str = '') -> str:
         return self.run(new_input)
 
+    def __getitem__(self, index: (int, int)) -> str:
+        return self.code[index]
+    def __setitem__(self, index: (int, int), val: str) -> None:
+        self.code[index] = val
+    def __contains__(self, item: str) -> bool:
+        return item in self.code
     def __str__(self):
         return str(self.code)
-
-
-
-
-
-
-
-#### tests ####
-
-from various_fishes import *
-
-#print(Fish.__doc__)
-#hello = Fish(bf)
-#print(hello)
-#print(hello.code.cols, hello.code.rows)
-#res = hello('+' * 97 + '...')
-#print(repr(res))
-#print(*map(ord, res))

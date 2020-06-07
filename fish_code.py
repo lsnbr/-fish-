@@ -18,10 +18,6 @@ class FishCode:
     def __str__(self) -> str:
         return '\n' + '\n'.join(map(''.join, self.code)) + '\n'
 
-
-    def __len__(self) -> int:
-        return self.rows * self.cols
-
     def __getitem__(self, index: (int, int)) -> str:
         col, row = index
         try:
