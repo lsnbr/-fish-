@@ -1,8 +1,7 @@
 # The ><> language
 
 
-A ><> (fish) program consists of a codebox, an IP (instruction pointer), a stack (of stacks), a register per stack, an input, and an output.
-
+A ><> (fish) program consists of a codebox, an IP (instruction pointer), a stack (of stacks), a register per stack, an input, and an output.  
 A ><> program is executed like this:
 ```
 load code
@@ -18,9 +17,11 @@ while True:
 
 ### **The codebox**
 - Coordinates are always written as (column, row).
-- Holds a single number (character) per cell.
+- Holds a single number (character) per cell in the range (-∞, +∞).
+- When parsed as command and when displayed, the cell value is wrapped into [0, 2**16).
 - Spans from -∞ to +∞ in both directions.
 - Starts with 0 in every cell.
+- Initial source code is only in all positive coordinates.
 
 ### **The IP**
 - Starts at (0,0) and moves to the right.
@@ -31,7 +32,7 @@ while True:
 - Division by zero.
 - Reaching an invalid instruction.
 - Trying to pop or modify the stack if it is empty or has too few values.
-- ARBITRARY_JUMP = False: Moving outside the smallest bounding box.
+- ARBITRARY_JUMP = False: Jumping outside the smallest bounding box.
 
 
 
@@ -73,9 +74,10 @@ All commands are stored in the Codebox as their Unicode code points.
 - `i ` Read one character from input and push it as a number to the stack. When no more input is available, -1 is pushed.
 
 ### **Relection / Miscellaneous**
-- `g ` Pop y,x of the stack and push the value at (x,y) in the codebox to the stack. x,y get rounded to nearest int.
-- `p ` Pop y,x,v of the stack and change the value at (x,y) in the codebox to v. x,y,v get rounded to nearest int.
+- `g ` Pop y,x of the stack and push the value at (x,y) in the codebox to the stack. x,y get rounded according to the ROUND_VALUES flag.
+- `p ` Pop y,x,v of the stack and change the value at (x,y) in the codebox to v. x,y,v get rounded according to the ROUND_VALUES flag.
 - `; ` End execution of the program.
+- `space \x00 ` NOP. Does nothing.
 
 
 
@@ -83,7 +85,6 @@ All commands are stored in the Codebox as their Unicode code points.
 <br><br>
 
 ### **Flags**
-- `ARBITRARY_JUMP = True ` Let the jump instruction jump outside the smallest bounding box. Causes an error otherwise.
+- `ARBITRARY_JUMP = False ` Let the jump instruction jump outside the smallest bounding box. Causes an error otherwise.
 - `EXACT_FRACTIONS = False ` Uses fractions instead of floating point numbers.
-- `VALUE_WRAP = True ` Wraps all values in the codebox between into [0, 2^16). Otherwise values can be anything in (-∞, +∞).
 - `ROUND_VALUES = False ` Rounds values from the stack to the nearest integer when used as coordinates or codebox character. Otherwise always round down to the nearest lower integer.
