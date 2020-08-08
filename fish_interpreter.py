@@ -1,22 +1,22 @@
-from fish_code import FishCode
+from fish_code import FishCode, FishStack, FishError, FishEndExecution
 
-from random import randint
 import operator as op
+from random import randint
 from string import hexdigits
 
+from typing import Iterable, Tuple, Optional, Union
+Input = Optional[Union[str, Iterable[Union[int, float]]]]
 
-class FishError(Exception):
-    def __init__(self, message):
-        super().__init__('something smells fishy...')
+
 
 class Fish:
     '''
-    Interprets a ><> (fish) program
+    Interprets a ><> (fish) program.
 
-    ><> (fish) is a 2-D language where every char is an instruction
-    The IP (instruction pointer) starts at (0,0) and moves to the right
-    There are 1 or more stacks, each with a register to store a value
-    Coordinates are always given as (column, row)
+    ><> (fish) is a 2-D language where every char is an instruction.
+    The IP (instruction pointer) starts at (0,0) and moves to the right.
+    There are 1 or more stacks, each with a register to store a value.
+    Coordinates are always given as (column, row).
 
     Instructions:
     ---------------
@@ -57,9 +57,7 @@ class Fish:
     ;           End execution
     '''
 
-    VALID_CHARS = '> < ^ v / \\ | _ # x ! ? . + - * , % = ) ('.split() + \
-                  '\' " : ~ $ @ } { r l [ ] o n i & g p ;'.split() + \
-                  [' '] + list(hexdigits[:16])
+    VALID_CHARS  = '><^v/\\|_#x!?.+-*,%=)(\'":~$@}{rl[]oni&gp; \x00' + hexdigits[:16]
     R_FORWARD    = {'right': 'up',    'left': 'down',  'down': 'left',  'up': 'right'}
     R_BACKWARD   = {'right': 'down',  'left': 'up',    'down': 'right', 'up': 'left'}
     R_HORIZONTAL = {'right': 'right', 'left': 'left',  'down': 'up',    'up': 'down'}
@@ -69,201 +67,179 @@ class Fish:
     OPERATORS    = {'+': op.add, '-': op.sub, '*': op.mul, ',': op.truediv, '%': op.mod}
 
 
-    def __init__(self, code: str = ';'):
-        self.code = FishCode(code)
-        self.stack = [[]]
-        self.pos = (0,0)
-        self.direction = 'right'
-        self.parse_mode = None
-        self.skip = False
-        self.is_running = False
-        self.register = [None]
-        self.stdout = ''
-        self.stdin = []
+    def __init__(self, code: str = ';', **flags: bool) -> None:
+        self.src_string = code
+        self.FLAGS = flags
+        if 'ARBITRARY_JUMP'  not in self.FLAGS: self.FLAGS['ARBITRARY_JUMP']  = False
+        if 'EXACT_FRACTIONS' not in self.FLAGS: self.FLAGS['EXACT_FRACTIONS'] = False
+        if 'ROUND_VALUES'    not in self.FLAGS: self.FLAGS['ROUND_VALUES']    = False
+
         self.COMMANDS = {
-            '>': self.right,      '<': self.left,         '^': self.up
-           ,'v': self.down,       '/': self.m_forward,    '\\':self.m_backward
-           ,'|': self.m_vertical, '_': self.m_horizontal, '#': self.m_cross
-           ,'x': self.m_random,   '!': self.tramp,        '?': self.tramp_cond
-           ,'.': self.jump,       '=': self.equals,       ')': self.greater
-           ,'(': self.smaller,    "'": self.single_quote, '"': self.double_quote
-           ,':': self.duplicate,  '~': self.remove,       '$': self.swap2
-           ,'@': self.swap3,      '}': self.shiftr,       '{': self.shiftl
-           ,'r': self.reverse,    'l': self.length,       '[': self.new_stack
-           ,']': self.del_stack,  'o': self.out_char,     'n': self.out_num
-           ,'i': self.read_char,  '&': self.do_register,  'g': self.get_code
-           ,'p': self.set_code,   ';': self.end,          ' ': lambda: None
-           ,**{c: self.literal for c in hexdigits[:16]}   # commands 0-9 and a-f
-           ,**{o: self.arithmetic for o in '+-*,%'}       # commands + - * , %
-           }
+            '>': self.right,      '<': self.left,         '^': self.up,
+            'v': self.down,       '/': self.m_forward,    '\\':self.m_backward,
+            '|': self.m_vertical, '_': self.m_horizontal, '#': self.m_cross,
+            'x': self.m_random,   '!': self.tramp,        '?': self.tramp_cond,
+            '.': self.jump,       '=': self.equals,       ')': self.greater,
+            '(': self.smaller,    "'": self.single_quote, '"': self.double_quote,
+            ':': self.duplicate,  '~': self.remove,       '$': self.swap2,
+            '@': self.swap3,      '}': self.shiftr,       '{': self.shiftl,
+            'r': self.reverse,    'l': self.length,       '[': self.new_stack,
+            ']': self.del_stack,  'o': self.out_char,     'n': self.out_num,
+            'i': self.read_char,  '&': self.do_register,  'g': self.get_code,
+            'p': self.set_code,   ';': self.end,
+            **{c: lambda: None    for c in '\x00' + ' '},    # no-op commands
+            **{c: self.literal    for c in hexdigits[:16]},  # commands 0-9 and a-f
+            **{c: self.arithmetic for c in '+-*,%'},         # commands + - * , %
+        }
 
-    @property
-    def len_stack(self) -> int:
-        return len(self.stack[-1])
-    @property
-    def stack_count(self) -> int:
-        return len(self.stack)
-    @property
-    def current_cmd(self) -> str:
-        return self.code[self.pos]
-    @property
-    def num_cols(self) -> int:
-        return self.code.cols
-    @property
-    def num_rows(self) -> int:
-        return self.code.rows
-
-    def pop(self, n: float = None) -> (float):
-        '''
-        Pops round(n) values from the top of the stack as a tuple
-
-        if the stack is [a,b,c,d,e], pop(2) returns (d,e)
-        without argument all values get popped
-        with n <= 0.5 an empty tuple is returned
-        if n is more than the stack length, an error gets raised
-        '''
-        if n is None: n = self.len_stack
-        n = max(0, round(n))
-        if n > self.len_stack:
-            raise FishError('not enough values to pop')
-        popped = tuple(self.stack[-1][-n:]) if n > 0 else ()
-        self.stack[-1][-n:] = []
-        return popped
-
-    def push(self, *vals: float, as_iter: [float] = ()) -> None:
-        '''pushes vals + as_iter to the stack, e.g [a,b] -> push(x,y, as_iter=(8,8)) -> [a,b,x,y,8,8]'''
-        items = vals + tuple(as_iter)
-        for val in items:
-            self.stack[-1].append(val)
     
     # commands
-    def right(self):
+    def right(self) -> None:
         self.direction = 'right'
-    def left(self):
+    def left(self) -> None:
         self.direction = 'left'
-    def down(self):
+    def down(self) -> None:
         self.direction = 'down'
-    def up(self):
+    def up(self) -> None:
         self.direction = 'up'
-    def m_forward(self):
+    def m_forward(self) -> None:
         self.direction = Fish.R_FORWARD[self.direction]
-    def m_backward(self):
+    def m_backward(self) -> None:
         self.direction = Fish.R_BACKWARD[self.direction]
-    def m_horizontal(self):
+    def m_horizontal(self) -> None:
         self.direction = Fish.R_HORIZONTAL[self.direction]
-    def m_vertical(self):
+    def m_vertical(self) -> None:
         self.direction = Fish.R_VERTICAL[self.direction]
-    def m_cross(self):
+    def m_cross(self) -> None:
         self.direction = Fish.R_CROSS[self.direction]
-    def m_random(self):
+    def m_random(self) -> None:
         self.direction = Fish.DIRECTIONS[randint(0, 3)]
-    def tramp(self):
+    def tramp(self) -> None:
         self.skip = True
-    def tramp_cond(self):
-        self.skip = not bool(self.pop(1)[0])
-    def jump(self):
-        self.pos = self.pop(2)
-    def literal(self):
-        self.push(int(self.current_cmd, base=16))
-    def arithmetic(self):
-        try: self.push(Fish.OPERATORS[self.current_cmd](*self.pop(2)))
-        except ZeroDivisionError: raise FishError('zero division is not allowed')
-    def equals(self):
-        self.push(int(op.eq(*self.pop(2))))
-    def greater(self):
-        self.push(int(op.gt(*self.pop(2))))
-    def smaller(self):
-        self.push(int(op.lt(*self.pop(2))))
-    def single_quote(self):
+    def tramp_cond(self) -> None:
+        self.skip = self.stack.pop(1)[0] == 0
+    def jump(self) -> None:
+        self.pos = self.stack.pop(2)
+    def literal(self) -> None:
+        self.stack.push(int(self.code.get_char(self.pos), base=16))
+    def arithmetic(self) -> None:
+        try:
+            self.stack.push(Fish.OPERATORS[self.code.get_char(self.pos)](*self.stack.pop(2)))
+        except ZeroDivisionError:
+            raise FishError('Division by zero is not allowed.')
+    def equals(self) -> None:
+        self.stack.push(int(op.eq(*self.stack.pop(2))))
+    def greater(self) -> None:
+        self.stack.push(int(op.gt(*self.stack.pop(2))))
+    def smaller(self) -> None:
+        self.stack.push(int(op.lt(*self.stack.pop(2))))
+    def single_quote(self) -> None:
         self.parse_mode = "'" if self.parse_mode is None else None
-    def double_quote(self):
+    def double_quote(self) -> None:
         self.parse_mode = '"' if self.parse_mode is None else None
-    def duplicate(self):
-        self.push(as_iter=(2 * self.pop(1)))
-    def remove(self):
-        self.pop(1)
-    def swap2(self):
-        self.push(as_iter=reversed(self.pop(2)))
-    def swap3(self):
-        x, y, z = self.pop(3)
-        self.push(z, x, y)
-    def shiftr(self):
-        if self.len_stack > 1:
-            *x, y = self.pop()
-            self.push(y, *x)
-    def shiftl(self):
-        if self.len_stack > 1:
-            x, *y = self.pop()
-            self.push(*y, x)
-    def reverse(self):
-        self.push(as_iter=reversed(self.pop()))
-    def length(self):
-        self.push(self.len_stack)
-    def new_stack(self):
-        x = self.pop(self.pop(1)[0])
-        self.stack.append(list(x))
+    def duplicate(self) -> None:
+        self.stack.push(as_iter=(2 * self.stack.pop(1)))
+    def remove(self) -> None:
+        self.stack.pop(1)
+    def swap2(self) -> None:
+        self.stack.push(as_iter=reversed(self.stack.pop(2)))
+    def swap3(self) -> None:
+        x, y, z = self.stack.pop(3)
+        self.stack.push(z, x, y)
+    def shiftr(self) -> None:
+        if self.stack.length > 1:
+            *x, y = self.stack.pop()
+            self.stack.push(y, *x)
+    def shiftl(self) -> None:
+        if self.stack.length > 1:
+            x, *y = self.stack.pop()
+            self.stack.push(*y, x)
+    def reverse(self) -> None:
+        self.stack.push(as_iter=reversed(self.stack.pop()))
+    def length(self) -> None:
+        self.stack.push(self.stack.length)
+    def new_stack(self) -> None:
+        x = self.stack.pop(self.stack.pop(1)[0])
+        self.stack.add_stack(x)
         self.register.append(None)
-    def del_stack(self):
-        x = self.pop()
-        if self.stack_count > 1:
-            self.stack.pop()
-            self.push(as_iter=x)
+    def del_stack(self) -> None:
+        if self.stack.stack_count > 1:
+            x = self.stack.del_stack()
+            self.stack.push(*x)
             self.register.pop()
-        else: self.register[-1] = None
-    def out_char(self):
-        self.stdout += chr(round(self.pop(1)[0]))
-    def out_num(self):
-        self.stdout += str(self.pop(1)[0])
-    def read_char(self):
-        self.push(self.stdin.pop() if self.stdin else -1)
-    def do_register(self):
-        if self.register[-1] is None:
-            self.register[-1] = self.pop(1)[0]
         else:
-            self.push(self.register[-1]) 
+            self.stack.del_stack()
+            self.register = [None]
+    def out_char(self) -> None:
+        self.fish_out += self.code.parse_char(self.stack.pop(1)[0])
+    def out_num(self) -> None:
+        self.fish_out += str(self.stack.pop(1)[0])
+    def read_char(self) -> None:
+        self.stack.push(self.fish_in.pop() if self.fish_in else -1)
+    def do_register(self) -> None:
+        if self.register[-1] is None:
+            self.register[-1] = self.stack.pop(1)[0]
+        else:
+            self.stack.push(self.register[-1]) 
             self.register[-1] = None
-    def get_code(self):
-        val = self[self.pop(2)]
-        self.push(0 if val == ' ' else ord(val))
-    def set_code(self):
-        v, *coord = self.pop(3)
-        self[coord] = chr(round(v))
-    def end(self):
+    def get_code(self) -> None:
+        self.stack.push(self.code[self.stack.pop(2)])
+    def set_code(self) -> None:
+        v, *coord = self.stack.pop(3)
+        self.code[coord] = v
+    def end(self) -> None:
         self.is_running = False
 
 
+    def initialize(self, inp: Input = None, stack: Input = None) -> None:
+        self.code = FishCode(self.src_string, **self.FLAGS)
+        self.stack = FishStack(stack)
+        self.register = [None]
+        self.fish_in = self.stack.parse_input(inp)
+        self.fish_in = self.fish_in[::-1]
+        self.fish_out = ''
 
-    def run(self, new_input: str = '') -> str:
-        self.stdin = list(map(ord, new_input))[::-1]
+        self.initialized = True
+        self.pos = (0, 0)
+        self.direction = 'right'
+        self.parse_mode = None
         self.is_running = True
+        self.skip = False
 
+    def reset(self) -> None:
+        self.initialized = False
+
+
+    def next_cycle(self) -> None:
+        if not self.initialized:
+            raise Exception('Fish object must be initialized first.')
+
+        cmd = self.code.get_char(self.pos)
+        if self.parse_mode is not None and self.parse_mode != cmd:
+            self.stack.push(ord(cmd))
+        else:
+            if cmd not in Fish.VALID_CHARS:
+                raise FishError(f'Invalid command: {cmd}, ord={ord(cmd)}.')
+            self.COMMANDS[cmd]()
+        if not self.is_running: raise FishEndExecution()
+        
+        d = (1 + int(self.skip)) * (-1 if self.direction in ('left', 'up') else 1)
+        col, row = self.pos
+        self.skip = False
+        self.pos = (
+            (col + d) % (self.code.max_col + 1) if self.direction in {'right', 'left'} else col,
+            (row + d) % (self.code.max_row + 1) if self.direction in {'up',    'down'} else row 
+        )
+
+
+    def __call__(self, inp: Input = None, stack: Input = None) -> str:
+        self.initialize(inp, stack)
         while True:
-            cmd = self.current_cmd
-            if self.parse_mode is not None and self.parse_mode != cmd:
-                self.push(ord(cmd))
-            else:
-                if cmd not in self.VALID_CHARS:
-                    raise FishError('invalid command')
-                self.COMMANDS[cmd]()
-            if not self.is_running: break
+            try:                     self.next_cycle()
+            except FishEndExecution: return self.fish_out
 
-            d = (1 + int(self.skip)) * (-1 if self.direction in {'left', 'up'} else 1)
-            col, row = self.pos
-            self.skip = False
-            self.pos = ((col + d) % self.num_cols if self.direction in {'right', 'left'} else col
-                       ,(row + d) % self.num_rows if self.direction in {'up', 'down'} else row)
-
-        return self.stdout
-
-
-    def __call__(self, new_input: str = '') -> str:
-        return self.run(new_input)
-
-    def __getitem__(self, index: (int, int)) -> str:
-        return self.code[index]
-    def __setitem__(self, index: (int, int), val: str) -> None:
-        self.code[index] = val
-    def __contains__(self, item: str) -> bool:
-        return item in self.code
-    def __str__(self):
-        return str(self.code)
+    
+    def __repr__(self) -> str:
+        if hasattr(self, 'code'):
+            return repr(self.code)
+        return repr(FishCode(self.src_string, **self.FLAGS))

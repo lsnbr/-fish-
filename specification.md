@@ -64,7 +64,7 @@ All commands are stored in the Codebox as their Unicode code points.
 - `} { ` Shift the entire stack to the right/left. e.g. 1,2,3,4 --}-> 4,1,2,3 and 1,2,3,4 --{-> 2,3,4,1.
 - `r ` Reverse the stack.
 - `l ` Push the length of the stack onto the stack.
-- `[ ` Pop x of the stack and create a new stack, moving x values from the old one onto the new one. Causes error if not enough values on the old stack are present. A new empty register for this stack is created.
+- `[ ` Pop x of the stack and create a new stack, moving max(x, 0) values from the old one onto the new one. Causes error if not enough values on the old stack are present. A new empty register for this stack is created.
 - `] ` Remove the current stack, moving its values to the top of the underlying stack. Removes also the current register without moving its value. If the current stack already is the last stack, the stack and register get emptied.
 - `& ` If the register is empty, pop the top value of the stack and put it in the register. Otherwise clear the register and put its value on the stack.
 
