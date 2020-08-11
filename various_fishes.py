@@ -78,9 +78,50 @@ v}]p$p4r}:r:$4[2@:/f1+/     /^?='-': <      \/
  '>'~ 20g1+20p/
 '''[1:-1]
 
+# should return '1'
 move1 = r'''
 v
 1
 >?v 1n;\
  0<    /
+'''[1:-1]
+
+# should return 'Hi'
+move2 = r'''
+aa*5+\
+7a*2+\
+oo;  \
+'''[1:-1]
+
+# should return the input reversed
+tac = r'''
+i:1+?!v
+      ~
+l?!;o >
+'''[1:-1]
+
+# should return '\n'.join(map(str, range(100))) + '\n'
+range100 = r'''
+01+:aa*=?;:nao!
+'''[1:-1]
+
+# should throw an error if not ROUND_VALUES and return '' otherwise
+fracjump = r'''
+b2,63,.
+
+   17,n;
+'''[1:-1]
+
+collatz = r'''
+i>:nao:1=?;\
+ ^  ,2v?%2:/
+ ^+1*3<
+'''[1:-1]
+
+draweq = r'''
+a&>i:0(?v"+"$\
+/&^?=0l< "a*"/
+\:1+&2p/\0
+n
+;
 '''[1:-1]

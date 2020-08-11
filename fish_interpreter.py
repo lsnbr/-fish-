@@ -1,4 +1,4 @@
-from fish_code import FishCode, FishStack, FishError, FishEndExecution
+from fish_classes import FishCode, FishStack, FishError, FishEndExecution
 
 import operator as op
 from random import randint
@@ -11,50 +11,10 @@ Input = Optional[Union[str, Iterable[Union[int, float]]]]
 
 class Fish:
     '''
-    Interprets a ><> (fish) program.
+    Interprets a ><> (fish) program, initialized with its source code as a string.
 
-    ><> (fish) is a 2-D language where every char is an instruction.
-    The IP (instruction pointer) starts at (0,0) and moves to the right.
-    There are 1 or more stacks, each with a register to store a value.
-    Coordinates are always given as (column, row).
-
-    Instructions:
-    ---------------
-    > < v ^     Change the IP direction to right/left/down/up respectively
-    / \ | _ #   Mirrors: change the IP direction depending on its current direction
-    x           Random direction
-    !           Trampoline: skip the following instruction
-    ?           Conditional trampoline: pop x of the stack. Skip the following instruction if x=0
-    .           Jump: pop x, y of the stack. Jump to posintion (x,y) in the codebox
-    0-9 a-f     Push the corresponding value onto the stack. a=10, ..., f=15
-    + - * , %   Addition, subtraction, multiplication, float division and modulo:
-                pop x, y of the stack and push x operator y to the stack
-    =           Equals: pop x, y of the stack and push 1 if x=y and 0 otherwise
-    ) (         Greater than, less than: pop x, y of the stack and push 1 if x operator y
-                and 0 otherwise
-    ' "         String parsing: pushes every character to the stack until it finds a closing quote
-    :           Duplicate the top value on the stack
-    ~           Remove the top value from the stack
-    $           Swap the top two values on the stack
-    @           Swap the top three values on the stack, shifting them rightwards,
-                e.g.:  1,2,3,4  --- @ -->  1,4,2,3
-    } {         Shift the entire stack to the right and left, respectively,
-                e.g.:  1,2,3,4  --- } -->  4,1,2,3  and  1,2,3,4  --- { -->  2,3,4,1
-    r           Reverse the stack
-    l           Push the length of the stack onto the stack
-    [           Pop x off the stack and create a new stack,
-                moving x values from the old stack onto the new one
-    ]           Remove the current stack, moving its values to the top of the underlying stack
-                If the current stack is the last stack, the stack and registry just get emptied
-    o n         Pop and output as a character and a number, respectively
-    i           Read one character and push it to the stack. Push -1 if no input is available
-    &           Pop the top value of the stack and put it in the register.
-                Calling & again will take the value in the register and put it back on the stack
-    g           Pop x, y of the stack and push the value at position (x,y) in the codebox.
-                Empty cells (' ') are equal to 0
-    p           Pop v, x, y of the stack, and change the value at position (x,y) to v,
-                e.g.:  123p  puts 1 at (2,3) in the codebox
-    ;           End execution
+    Can be called with initial stack and input, returning the output if terminating.
+    Can also be initialized with stack and input first, and then advancing the program manually.
     '''
 
     VALID_CHARS  = '><^v/\\|_#x!?.+-*,%=)(\'":~$@}{rl[]oni&gp; \x00' + hexdigits[:16]
@@ -72,8 +32,7 @@ class Fish:
         self.FLAGS = flags
         if 'ARBITRARY_JUMP'  not in self.FLAGS: self.FLAGS['ARBITRARY_JUMP']  = False
         if 'EXACT_FRACTIONS' not in self.FLAGS: self.FLAGS['EXACT_FRACTIONS'] = False
-        if 'ROUND_VALUES'    not in self.FLAGS: self.FLAGS['ROUND_VALUES']    = False
-
+        if 'ROUND_VALUES'    not in self.FLAGS: self.FLAGS['ROUND_VALUES']    = True
         self.COMMANDS = {
             '>': self.right,      '<': self.left,         '^': self.up,
             'v': self.down,       '/': self.m_forward,    '\\':self.m_backward,
@@ -119,7 +78,7 @@ class Fish:
     def tramp_cond(self) -> None:
         self.skip = self.stack.pop(1)[0] == 0
     def jump(self) -> None:
-        self.pos = self.stack.pop(2)
+        self.pos = self.code.parse_coord(self.stack.pop(2))
     def literal(self) -> None:
         self.stack.push(int(self.code.get_char(self.pos), base=16))
     def arithmetic(self) -> None:

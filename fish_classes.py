@@ -74,7 +74,12 @@ class FishCode:
         return self.code[self.parse_coord(index)]
 
     def __setitem__(self, index: Coord, val: Value) -> None:
-        self.code[self.parse_coord(index)] = self.parse_value(val)
+        col, row = self.parse_coord(index)
+        self.code[col, row] = self.parse_value(val)
+        if col < self.min_col: self.min_col = col
+        elif col > self.max_col: self.max_col = col
+        if row < self.min_row: self.min_row = row
+        elif row > self.max_row: self.max_row = row
 
     def __contains__(self, item: Value) -> bool:
         val = self.parse_value(item)
